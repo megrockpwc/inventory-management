@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
+import mock_data
 
 app = FastAPI(title="Factory Inventory Management System")
 
@@ -119,6 +121,33 @@ class CreatePurchaseOrderRequest(BaseModel):
     unit_cost: float
     expected_delivery_date: str
     notes: Optional[str] = None
+
+class RestockRecommendation(BaseModel):
+    id: str
+    sku: str
+    name: str
+    category: str
+    warehouse: str
+    current_stock: int
+    reorder_point: int
+    restock_quantity: int
+    unit_cost: float
+    restock_cost: float
+    forecasted_demand: int
+    trend: str
+    is_below_reorder: bool
+
+class RestockResponse(BaseModel):
+    recommendations: List[RestockRecommendation]
+    total_cost: float
+    remaining_budget: float
+
+class CreateOrderRequest(BaseModel):
+    customer: str
+    items: List[dict]
+    warehouse: Optional[str] = None
+    category: Optional[str] = None
+    status: str = "Submitted"
 
 # API endpoints
 @app.get("/")
@@ -303,6 +332,98 @@ def get_monthly_trends():
     result = list(months.values())
     result.sort(key=lambda x: x['month'])
     return result
+
+@app.get("/api/restock/recommendations", response_model=RestockResponse)
+def get_restock_recommendations(
+    budget: float = 0,
+    warehouse: Optional[str] = None,
+    category: Optional[str] = None
+):
+    """Return items to restock within the given budget.
+
+    Priority: items below reorder_point first, then by highest forecasted demand.
+    Target quantity: max(2 * reorder_point, forecasted_demand) - current stock.
+    """
+    items = apply_filters(mock_data.inventory_items, warehouse=warehouse, category=category)
+    forecast_map = {f['item_sku']: f for f in mock_data.demand_forecasts}
+
+    candidates = []
+    for item in items:
+        sku = item['sku']
+        forecast = forecast_map.get(sku)
+        forecasted_demand = forecast['forecasted_demand'] if forecast else 0
+        trend = forecast['trend'] if forecast else 'stable'
+
+        target_qty = max(item['reorder_point'] * 2, forecasted_demand)
+        restock_qty = max(0, target_qty - item['quantity_on_hand'])
+        if restock_qty == 0:
+            continue
+
+        restock_cost = restock_qty * item['unit_cost']
+        is_below_reorder = item['quantity_on_hand'] < item['reorder_point']
+
+        candidates.append({
+            'id': item['id'],
+            'sku': sku,
+            'name': item['name'],
+            'category': item['category'],
+            'warehouse': item['warehouse'],
+            'current_stock': item['quantity_on_hand'],
+            'reorder_point': item['reorder_point'],
+            'restock_quantity': restock_qty,
+            'unit_cost': item['unit_cost'],
+            'restock_cost': restock_cost,
+            'forecasted_demand': forecasted_demand,
+            'trend': trend,
+            'is_below_reorder': is_below_reorder,
+        })
+
+    # Items below reorder point come first; within each group sort by highest forecasted demand
+    candidates.sort(key=lambda x: (0 if x['is_below_reorder'] else 1, -x['forecasted_demand']))
+
+    # Greedy selection: add items while they fit in the remaining budget
+    remaining = budget
+    selected = []
+    for c in candidates:
+        if c['restock_cost'] <= remaining:
+            selected.append(c)
+            remaining -= c['restock_cost']
+
+    return RestockResponse(
+        recommendations=selected,
+        total_cost=round(budget - remaining, 2),
+        remaining_budget=round(remaining, 2)
+    )
+
+
+@app.post("/api/orders", response_model=Order)
+def create_order(order_data: CreateOrderRequest):
+    """Create a new order and append it to the in-memory orders list.
+
+    Order lives only for the current server session — lost on restart.
+    """
+    new_id = str(max(int(o['id']) for o in mock_data.orders) + 1)
+    order_number = f"ORD-2025-{new_id.zfill(4)}"
+
+    now = datetime.now()
+    expected_delivery = now + timedelta(days=14)
+    total_value = sum(i['quantity'] * i['unit_price'] for i in order_data.items)
+
+    new_order = {
+        'id': new_id,
+        'order_number': order_number,
+        'customer': order_data.customer,
+        'items': order_data.items,
+        'status': order_data.status,
+        'order_date': now.isoformat(),
+        'expected_delivery': expected_delivery.isoformat(),
+        'total_value': round(total_value, 2),
+        'warehouse': order_data.warehouse,
+        'category': order_data.category,
+    }
+    mock_data.orders.append(new_order)
+    return Order(**new_order)
+
 
 if __name__ == "__main__":
     import uvicorn

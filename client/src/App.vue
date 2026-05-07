@@ -1,48 +1,56 @@
 <template>
   <div class="app">
-    <header class="top-nav">
-      <div class="nav-container">
-        <div class="logo">
-          <h1>{{ t('nav.companyName') }}</h1>
-          <span class="subtitle">{{ t('nav.subtitle') }}</span>
+    <!-- LEFT SIDEBAR -->
+    <aside :class="['sidebar', { collapsed: isCollapsed }]">
+      <!-- Header: logo + toggle -->
+      <div class="sidebar-header">
+        <div class="sidebar-logo" v-if="!isCollapsed">
+          <span class="logo-name">{{ t('nav.companyName') }}</span>
+          <span class="logo-sub">{{ t('nav.subtitle') }}</span>
         </div>
-        <nav class="nav-tabs">
-          <router-link to="/" :class="{ active: $route.path === '/' }">
-            {{ t('nav.overview') }}
-          </router-link>
-          <router-link to="/inventory" :class="{ active: $route.path === '/inventory' }">
-            {{ t('nav.inventory') }}
-          </router-link>
-          <router-link to="/orders" :class="{ active: $route.path === '/orders' }">
-            {{ t('nav.orders') }}
-          </router-link>
-          <router-link to="/spending" :class="{ active: $route.path === '/spending' }">
-            {{ t('nav.finance') }}
-          </router-link>
-          <router-link to="/demand" :class="{ active: $route.path === '/demand' }">
-            {{ t('nav.demandForecast') }}
-          </router-link>
-          <router-link to="/reports" :class="{ active: $route.path === '/reports' }">
-            Reports
-          </router-link>
-        </nav>
-        <LanguageSwitcher />
-        <ProfileMenu
-          @show-profile-details="showProfileDetails = true"
-          @show-tasks="showTasks = true"
-        />
+        <span class="logo-initials" v-else>CC</span>
+        <button
+          class="toggle-btn"
+          @click="isCollapsed = !isCollapsed"
+          :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4L6 9L11 14"/>
+          </svg>
+        </button>
       </div>
-    </header>
-    <FilterBar />
-    <main class="main-content">
-      <router-view />
-    </main>
 
-    <ProfileDetailsModal
-      :is-open="showProfileDetails"
-      @close="showProfileDetails = false"
-    />
+      <!-- Nav links -->
+      <nav class="sidebar-nav">
+        <router-link
+          v-for="item in navItems"
+          :key="item.route"
+          :to="item.route"
+          :class="['nav-item', { active: $route.path === item.route }]"
+          :title="isCollapsed ? item.label : undefined"
+        >
+          <span class="nav-icon" v-html="item.icon"></span>
+          <span class="nav-label" v-if="!isCollapsed">{{ item.label }}</span>
+        </router-link>
+      </nav>
 
+      <!-- Footer: language + profile -->
+      <div class="sidebar-footer">
+        <LanguageSwitcher />
+        <ProfileMenu @show-profile-details="showProfileDetails = true" @show-tasks="showTasks = true" />
+      </div>
+    </aside>
+
+    <!-- RIGHT: filter bar + page content -->
+    <div class="app-body">
+      <FilterBar />
+      <main class="main-content">
+        <router-view />
+      </main>
+    </div>
+
+    <!-- Modals (unchanged) -->
+    <ProfileDetailsModal :is-open="showProfileDetails" @close="showProfileDetails = false" />
     <TasksModal
       :is-open="showTasks"
       :tasks="tasks"
@@ -55,7 +63,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api } from './api'
 import { useAuth } from './composables/useAuth'
 import { useI18n } from './composables/useI18n'
@@ -80,11 +88,47 @@ export default {
     const showProfileDetails = ref(false)
     const showTasks = ref(false)
     const apiTasks = ref([])
+    const isCollapsed = ref(false)
 
     // Merge mock tasks from currentUser with API tasks
     const tasks = computed(() => {
       return [...currentUser.value.tasks, ...apiTasks.value]
     })
+
+    const navItems = [
+      {
+        label: t('nav.overview'), route: '/',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>`
+      },
+      {
+        label: t('nav.inventory'), route: '/inventory',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l7-4 7 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V7z"/><path d="M7 17V10h6v7"/></svg>`
+      },
+      {
+        label: t('nav.orders'), route: '/orders',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="12" height="16" rx="1"/><path d="M7 7h6M7 10h6M7 13h4"/></svg>`
+      },
+      {
+        label: t('nav.finance'), route: '/spending',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 6v1m0 6v1M8 9a2 2 0 014 0c0 1.5-4 2-4 3.5a2 2 0 004 0"/></svg>`
+      },
+      {
+        label: t('nav.demandForecast'), route: '/demand',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14l4-5 4 3 5-7"/><path d="M14 5h3v3"/></svg>`
+      },
+      {
+        label: 'Reports', route: '/reports',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="1"/><path d="M7 13V10M10 13V7M13 13V9"/></svg>`
+      },
+      {
+        label: 'Restocking', route: '/restocking',
+        icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a6 6 0 016-6 6 6 0 014.24 1.76L16 7"/><path d="M16 3v4h-4"/><path d="M16 10a6 6 0 01-6 6 6 6 0 01-4.24-1.76L4 13"/><path d="M4 17v-4h4"/></svg>`
+      },
+    ]
+
+    const handleResize = () => {
+      isCollapsed.value = window.innerWidth <= 1024
+    }
 
     const loadTasks = async () => {
       try {
@@ -146,7 +190,15 @@ export default {
       }
     }
 
-    onMounted(loadTasks)
+    onMounted(() => {
+      handleResize()
+      window.addEventListener('resize', handleResize)
+      loadTasks()
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('resize', handleResize)
+    })
 
     return {
       t,
@@ -155,7 +207,9 @@ export default {
       tasks,
       addTask,
       deleteTask,
-      toggleTask
+      toggleTask,
+      isCollapsed,
+      navItems
     }
   }
 }
@@ -176,101 +230,230 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Layout ── */
 .app {
   display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  flex-direction: row;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.top-nav {
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-  position: sticky;
-  top: 0;
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.25s ease, min-width 0.25s ease;
+  overflow: hidden;
   z-index: 100;
 }
 
-.nav-container {
-  max-width: 1600px;
-  margin: 0 auto;
+.sidebar.collapsed {
+  width: 64px;
+  min-width: 64px;
+}
+
+/* ── Sidebar header ── */
+.sidebar-header {
   display: flex;
   align-items: center;
-  padding: 0 2rem;
-  height: 70px;
+  justify-content: space-between;
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid #1e293b;
+  min-height: 70px;
+  gap: 0.5rem;
 }
 
-.nav-container > .nav-tabs {
-  margin-left: auto;
-  margin-right: 1rem;
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
 }
 
-.nav-container > .language-switcher {
-  margin-right: 1rem;
-}
-
-.logo {
+.sidebar-logo {
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+  min-width: 0;
 }
 
-.logo h1 {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: #0f172a;
-  letter-spacing: -0.025em;
-}
-
-.subtitle {
-  font-size: 0.813rem;
-  color: #64748b;
-  font-weight: 400;
-  padding-left: 0.75rem;
-  border-left: 1px solid #e2e8f0;
-}
-
-.nav-tabs {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.nav-tabs a {
-  padding: 0.625rem 1.25rem;
-  color: #64748b;
-  text-decoration: none;
-  font-weight: 500;
+.logo-name {
   font-size: 0.938rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+}
+
+.logo-sub {
+  font-size: 0.7rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.logo-initials {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.05em;
+}
+
+/* ── Toggle button ── */
+.toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0.25rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.toggle-btn:hover {
+  color: #f1f5f9;
+  background: #1e293b;
+}
+
+.toggle-btn svg {
+  transition: transform 0.25s ease;
+}
+
+.sidebar.collapsed .toggle-btn svg {
+  transform: rotate(180deg);
+}
+
+/* ── Nav ── */
+.sidebar-nav {
+  flex: 1;
+  padding: 0.75rem 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  margin: 1px 8px;
+  color: #94a3b8;
+  text-decoration: none;
   border-radius: 6px;
-  transition: all 0.2s ease;
-  position: relative;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
-.nav-tabs a:hover {
-  color: #0f172a;
-  background: #f1f5f9;
+.nav-item:hover {
+  background: #1e293b;
+  color: #f1f5f9;
 }
 
-.nav-tabs a.active {
-  color: #2563eb;
-  background: #eff6ff;
+.nav-item.active {
+  background: #1e40af;
+  color: #fff;
 }
 
-.nav-tabs a.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
+/* Icon-only mode when collapsed */
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0.625rem;
+  gap: 0;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-label {
+  overflow: hidden;
+  flex: 1;
+}
+
+/* ── Footer ── */
+.sidebar-footer {
+  padding: 0.75rem 0.5rem;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Make LanguageSwitcher and ProfileMenu fit the sidebar color scheme */
+.sidebar-footer .language-button,
+.sidebar-footer .profile-button {
+  background: transparent;
+  border-color: #1e293b;
+  color: #94a3b8;
+  width: 100%;
+}
+
+.sidebar-footer .language-button:hover,
+.sidebar-footer .profile-button:hover {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+.sidebar-footer .profile-name,
+.sidebar-footer .language-label {
+  color: #94a3b8;
+}
+
+/* In collapsed mode: hide text labels, show only icon/avatar */
+.sidebar.collapsed .sidebar-footer .language-label,
+.sidebar.collapsed .sidebar-footer .chevron {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-footer .profile-name,
+.sidebar.collapsed .sidebar-footer .profile-button .chevron {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-footer .language-button,
+.sidebar.collapsed .sidebar-footer .profile-button {
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+/* Dropdowns from footer open UPWARD so they don't go off-screen */
+.sidebar-footer .dropdown-menu {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
   right: 0;
-  height: 2px;
-  background: #2563eb;
+  left: 0;
+}
+
+/* ── App body (right side) ── */
+.app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .main-content {
   flex: 1;
-  max-width: 1600px;
-  width: 100%;
-  margin: 0 auto;
+  overflow-y: auto;
   padding: 1.5rem 2rem;
 }
 
